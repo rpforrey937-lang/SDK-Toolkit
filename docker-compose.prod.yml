@@ -1,0 +1,112 @@
+# Production Docker Compose Configuration
+# Use: docker-compose -f docker-compose.prod.yml up
+
+services:
+
+  gateway:
+    build: 
+      context: ./gateway
+      dockerfile: Dockerfile.prod
+    container_name: agentic-gateway-prod
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=INFO
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///tokens.db}
+    volumes:
+      - ./data/gateway:/app/data
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - agentic-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  mcp:
+    build:
+      context: ./mcp-server
+      dockerfile: Dockerfile.prod
+    container_name: agentic-mcp-prod
+    ports:
+      - "9000:9000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - GATEWAY_URL=http://gateway:8000
+      - LOG_LEVEL=INFO
+    depends_on:
+      gateway:
+        condition: service_healthy
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - agentic-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  # Optional: PostgreSQL database for production
+  postgres:
+    image: postgres:15-alpine
+    container_name: agentic-db-prod
+    environment:
+      - POSTGRES_USER=${DB_USER:-agentic}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-secure_password}
+      - POSTGRES_DB=${DB_NAME:-agentic_commerce}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: always
+    networks:
+      - agentic-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-agentic}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Optional: Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: agentic-proxy-prod
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - gateway
+      - mcp
+    restart: always
+    networks:
+      - agentic-network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  agentic-network:
+    driver: bridge

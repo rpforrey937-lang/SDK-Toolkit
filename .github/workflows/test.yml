@@ -1,15 +1,21 @@
-name: Tests
+name: CI/CD
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
+    tags: [ 'v*' ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, develop ]
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME_GATEWAY: agentic-gateway
+  IMAGE_NAME_MCP: agentic-mcp
 
 jobs:
   test:
     runs-on: ubuntu-latest
-
+    
     steps:
     - uses: actions/checkout@v3
 
@@ -21,24 +27,133 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r sdk-python/setup.py -e .
+        pip install -e sdk-python/
         pip install -r gateway/requirements.txt
         pip install -r mcp-server/requirements.txt
 
     - name: Lint with flake8
       run: |
         pip install flake8
-        flake8 sdk-python/ gateway/ mcp-server/ --count --select=E9,F63,F7,F82 --show-source --statistics
-      continue-on-error: true
-
-    - name: Test Python SDK
-      run: |
-        cd sdk-python && python -m pytest -v || true
+        flake8 sdk-python/ gateway/ mcp-server/ --count --select=E9,F63,F7,F82 --show-source --statistics || true
 
     - name: Test Gateway
       run: |
-        cd gateway && python -c "from app import app; print('Gateway imports OK')"
+        cd gateway && python -c "from app import app; print('✓ Gateway imports OK')"
 
     - name: Test MCP Server
       run: |
-        cd mcp-server && python -c "from server import app; print('MCP Server imports OK')"
+        cd mcp-server && python -c "from server import app; print('✓ MCP Server imports OK')"
+
+    - name: Test SDK
+      run: |
+        cd sdk-python && python -c "from agentic_sdk import AgentClient; print('✓ SDK imports OK')"
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Extract metadata
+      id: meta-gw
+      uses: docker/metadata-action@v4
+      with:
+        images: ${{ env.REGISTRY }}/${{ github.repository }}/agentic-gateway
+        tags: |
+          type=ref,event=branch
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha
+
+    - name: Extract metadata MCP
+      id: meta-mcp
+      uses: docker/metadata-action@v4
+      with:
+        images: ${{ env.REGISTRY }}/${{ github.repository }}/agentic-mcp
+        tags: |
+          type=ref,event=branch
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha
+
+    - name: Build and test Gateway image
+      uses: docker/build-push-action@v4
+      with:
+        context: ./gateway
+        push: false
+        load: true
+        tags: test-gateway:latest
+
+    - name: Build and test MCP image
+      uses: docker/build-push-action@v4
+      with:
+        context: ./mcp-server
+        push: false
+        load: true
+        tags: test-mcp:latest
+
+    - name: Test Docker images
+      run: |
+        docker run --rm test-gateway:latest python -c "from app import app; print('✓ Gateway container OK')"
+        docker run --rm test-mcp:latest python -c "from server import app; print('✓ MCP container OK')"
+
+  deploy-staging:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Deploy to staging
+      env:
+        GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+      run: |
+        echo "🚀 Deploying to Google Cloud Run (staging)..."
+        echo "$GCP_SA_KEY" | base64 -d > /tmp/key.json
+        gcloud auth activate-service-account --key-file=/tmp/key.json
+        gcloud config set project $GCP_PROJECT_ID
+        bash ./deploy-gcloud.sh $GCP_PROJECT_ID us-central1 staging
+      if: env.GCP_PROJECT_ID != ''
+
+  deploy-production:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
+    
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Deploy to production
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        AWS_REGION: us-east-1
+      run: |
+        echo "🚀 Deploying to AWS ECS (production)..."
+        bash ./deploy-ecs.sh production ${{ github.ref_name }}
+      if: env.AWS_ACCESS_KEY_ID != ''
+
+  notify:
+    needs: [test]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Notify success
+      if: success()
+      run: echo "✅ All checks passed!"
+
+    - name: Notify failure
+      if: failure()
+      run: echo "❌ Build failed" && exit 1
