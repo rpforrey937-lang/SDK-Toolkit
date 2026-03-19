@@ -1,0 +1,31 @@
+{
+  "$schema": "https://railway.app/schemas/railway/railway.schema.json",
+  "services": [
+    {
+      "name": "gateway",
+      "path": "gateway",
+      "build": {
+        "dockerfile": "Dockerfile",
+        "context": "."
+      },
+      "start": "uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000}",
+      "port": 8000,
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    },
+    {
+      "name": "mcp",
+      "path": "mcp-server",
+      "build": {
+        "dockerfile": "Dockerfile",
+        "context": "."
+      },
+      "start": "uvicorn server:app --host 0.0.0.0 --port ${PORT:-9000}",
+      "port": 9000,
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  ]
+}

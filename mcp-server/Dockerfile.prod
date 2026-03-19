@@ -23,5 +23,5 @@ USER appuser
 
 EXPOSE 9000
 
-# Use gunicorn for production with multiple workers
-CMD ["gunicorn", "--bind", "0.0.0.0:9000", "--workers", "2", "--worker-class", "uvicorn.workers.UvicornWorker", "server:app"]
+# Bind to $PORT if supplied (Railway / Cloud platforms set PORT automatically)
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-9000} --workers 2 --worker-class uvicorn.workers.UvicornWorker server:app"]

@@ -249,6 +249,21 @@ This demonstrates:
 - Processing checkouts on multiple platforms
 - Error handling
 
+### Run Fake WooCommerce Purchase Agent
+
+This script creates an agentic token and performs a fake checkout for a WooCommerce merchant.
+
+```bash
+python woo_fake_purchase_agent.py \
+  --gateway-url http://localhost:8000 \
+  --api-key demo-key-12345 \
+  --user demo-user \
+  --amount 49.99 \
+  --item "T-shirt:49.99"
+```
+
+> Tip: If you have a WooCommerce store with the Agentic Pay plugin installed, you can copy the created token into the checkout page to simulate a real purchase.
+
 ### Health Checks
 
 ```bash

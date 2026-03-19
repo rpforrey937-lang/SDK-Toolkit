@@ -99,6 +99,18 @@ Shopify app integration for enabling agent-based checkout on Shopify stores.
    - Python SDK: `cd sdk-python && pip install -e .`
    - Shopify App: `cd shopify-app && npm install && npm start`
 
+## Deploying on Railway
+
+This repository includes a `railway.json` configuration and Dockerfiles that are compatible with Railway deployments (Railway provides the `PORT` env var at runtime).
+
+```bash
+# Install Railway CLI: https://railway.app
+railway init
+railway up
+```
+
+Railway will build the `gateway` and `mcp` services using their respective Dockerfiles and route incoming requests to the appropriate service ports.
+
 ## API Endpoints
 
 ### Gateway (Port 8000)

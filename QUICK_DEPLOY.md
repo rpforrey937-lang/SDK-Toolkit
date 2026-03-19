@@ -28,7 +28,18 @@ docker-compose restart
 
 ## Deploy to Cloud (Choose One)
 
-### 1️⃣ Google Cloud Run (Easiest)
+### 1️⃣ Railway (Quick and Easy)
+Railway can deploy this repo using the included `railway.json` configuration and the service Dockerfiles.
+
+```bash
+# Install Railway CLI: https://railway.app
+railway init
+railway up
+```
+
+> Tip: Railway will assign a dynamic port via the `PORT` environment variable. The Dockerfiles in `gateway/` and `mcp-server/` are already configured to bind to `$PORT`.
+
+### 2️⃣ Google Cloud Run (Easiest)
 ```bash
 chmod +x deploy-gcloud.sh
 ./deploy-gcloud.sh YOUR_PROJECT_ID us-central1 v1.0.0
