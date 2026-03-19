@@ -9,5 +9,5 @@ COPY server.py .
 
 EXPOSE 9000
 
-# Bind to $PORT if supplied (Railway / Cloud platforms set PORT automatically)
-CMD ["sh", "-c", "uvicorn server:app --host 0.0.0.0 --port ${PORT:-9000}"]
+# Bind to port 9000
+CMD ["sh", "-c", "uvicorn server:app --host 0.0.0.0 --port 9000"]
